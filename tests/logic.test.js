@@ -226,3 +226,53 @@ test("PLAN_TYPES is the single table the four types come from", () => {
 test("escapeHtml escapes markup and quotes", () => {
   assert.strictEqual(L.escapeHtml(`<img src="x" onerror='a&b'>`), "&lt;img src=&quot;x&quot; onerror=&#39;a&amp;b&#39;&gt;");
 });
+
+const JPEG = "data:image/jpeg;base64,/9j/4AAQ";
+
+test("fromLegacy converts template plans, {t,done} tasks and photo memories to the v1 shape", () => {
+  const { state, photos } = L.fromLegacy({
+    plans: JSON.stringify([{ id: 1700000000000, title: " Lake day ", type: "outing", date: "2026-12-12", place: "Tahoe", desc: "swim", emoji: "🧋" }]),
+    tasks: JSON.stringify([{ t: "Pack towels", done: true }, { t: "Buy snacks", done: false }]),
+    memories: JSON.stringify([{ id: 1700000000001, title: "Sunset", date: "2026-11-02", mood: "Happy ☀️", text: "pink sky", photo: JPEG, tags: ["sky"] }]),
+  }, TODAY);
+  assert.deepStrictEqual(state, {
+    version: 1,
+    plans: [{ id: "legacy-plan-0", title: "Lake day", type: "outing", date: "2026-12-12", place: "Tahoe", desc: "swim", emoji: "🧋" }],
+    tasks: [
+      { id: "legacy-task-0", text: "Pack towels", done: true, planId: null },
+      { id: "legacy-task-1", text: "Buy snacks", done: false, planId: null },
+    ],
+    memories: [{ id: "legacy-memory-0", title: "Sunset", date: "2026-11-02", mood: "Happy ☀️", text: "pink sky", tags: ["sky"], hasPhoto: true }],
+  });
+  assert.deepStrictEqual(photos, [{ id: "legacy-memory-0", dataUrl: JPEG }]);
+});
+
+test("fromLegacy output survives parseState unchanged", () => {
+  const { state } = L.fromLegacy({ plans: JSON.stringify([{ id: 3, title: "A", type: "trip" }]), tasks: "[]", memories: JSON.stringify([{ id: 9, text: "hi" }]) }, TODAY);
+  assert.deepStrictEqual(L.parseState(JSON.stringify(state), TODAY), state);
+});
+
+test("fromLegacy is deterministic, so a rerun after a crash yields the same ids", () => {
+  const raw = { plans: JSON.stringify([{ id: 5, title: "X", type: "event" }]), tasks: null, memories: JSON.stringify([{ id: 7, title: "M", photo: JPEG }]) };
+  assert.deepStrictEqual(L.fromLegacy(raw, TODAY), L.fromLegacy(raw, TODAY));
+});
+
+test("fromLegacy uses the seed for a missing or corrupt key, as the template showed its defaults", () => {
+  const { state, photos } = L.fromLegacy({ plans: null, tasks: "{oops", memories: null }, TODAY);
+  assert.deepStrictEqual(state.plans, seed().plans);
+  assert.deepStrictEqual(state.tasks, seed().tasks);
+  assert.deepStrictEqual(state.memories, []);
+  assert.deepStrictEqual(photos, []);
+});
+
+test("fromLegacy drops blank tasks and plans, empty memories, and non-image photos", () => {
+  const { state, photos } = L.fromLegacy({
+    plans: JSON.stringify([{ id: 1, title: "  " }, null]),
+    tasks: JSON.stringify([{ t: " " }, { t: 4 }, { t: "ok" }]),
+    memories: JSON.stringify([{ id: 1 }, { id: 2, title: "kept", photo: "javascript:alert(1)" }]),
+  }, TODAY);
+  assert.deepStrictEqual(state.plans, []);
+  assert.deepStrictEqual(state.tasks.map((t) => [t.id, t.text]), [["legacy-task-2", "ok"]]);
+  assert.deepStrictEqual(state.memories.map((m) => [m.id, m.hasPhoto]), [["legacy-memory-1", false]]);
+  assert.deepStrictEqual(photos, []);
+});
