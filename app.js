@@ -479,7 +479,7 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
         toast("Plan deleted");
       }),
       "close-modal": closeModal,
-      backdrop: (el, ev) => { if (ev.target === el) closeModal(); },
+      backdrop: (el, ev) => { if (ev.target === el && pressTarget === el) closeModal(); },
       "set-filter": (el) => { ui.filter = el.dataset.filter; render(); },
       "pick-emoji": (el) => setEmoji(el.closest("form"), el.dataset.emoji),
       "cal-prev": () => { ui.calendarCursor = L.shiftMonth(ui.calendarCursor, -1); render(); },
@@ -513,6 +513,9 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       },
     },
   };
+
+  let pressTarget = null;
+  document.addEventListener("pointerdown", (ev) => { pressTarget = ev.target; });
 
   const CONFIRM_ACTIONS = new Set(["delete-plan", "cancel-delete"]);
 
