@@ -7,6 +7,7 @@
   const STORAGE_KEY = "daydream.v1";
   const PHOTO_MAX = 1000;
   const PHOTO_QUALITY = 0.78;
+  const DATE_BOUNDS = 'min="0100-01-01" max="9999-12-31"';
 
   const ROUTES = {
     home: { icon: "⌂", label: "Home", title: "Hey there, planner! ☁️", sub: "What are we dreaming up today?" },
@@ -245,7 +246,7 @@
     const photo = draft("journal:photo", null);
     return `<div class="journal-form-panel"><h3>Save a memory ♡</h3><p>Photos, little moments, thoughts, and stories.</p><form data-action="save-memory"><div class="journal-fields">
 <label class="sr-only" for="memoryTitle">Memory title</label><input id="memoryTitle" name="title" data-draft="journal:title" value="${e(draft("journal:title"))}" placeholder="Memory title (optional)">
-<label class="sr-only" for="memoryDate">Date</label><input id="memoryDate" name="date" type="date" data-draft="journal:date" value="${e(draft("journal:date", today))}">
+<label class="sr-only" for="memoryDate">Date</label><input id="memoryDate" name="date" type="date" ${DATE_BOUNDS} data-draft="journal:date" value="${e(draft("journal:date", today))}">
 <label class="sr-only" for="memoryMood">Mood</label><select id="memoryMood" name="mood" data-draft="journal:mood"><option value="">Choose a mood (optional)</option>${MOODS.map((o) => `<option ${o === mood ? "selected" : ""}>${e(o)}</option>`).join("")}</select>
 <label class="sr-only" for="memoryText">What happened</label><textarea id="memoryText" name="text" data-draft="journal:text" placeholder="Write about your day, what happened, what you loved, or anything you want to remember...">${e(draft("journal:text"))}</textarea>
 <label class="sr-only" for="memoryTags">Tags</label><input id="memoryTags" name="tags" data-draft="journal:tags" value="${e(draft("journal:tags"))}" placeholder="Tags (separate with commas)">
@@ -336,7 +337,7 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       return modalShell(p ? "Edit plan" : "Create a new plan", `<form data-action="save-plan" data-id="${e(m.id || "")}">
 <div class="field"><label for="planName">What are you planning?</label><input id="planName" name="title" data-draft="modal:title" autofocus required placeholder="e.g. Beach weekend, Birthday dinner" value="${e(v.title)}"></div>
 <div class="field"><label for="planType">Type</label><select id="planType" name="type" data-draft="modal:type" data-action="plan-type" data-prev="${v.type}">${Object.entries(PLAN_TYPES).map(([k, t]) => `<option value="${k}" ${k === v.type ? "selected" : ""}>${e(t.formLabel)}</option>`).join("")}</select></div>
-<div class="form-row"><div class="field"><label for="planDate">Date</label><input id="planDate" name="date" type="date" data-draft="modal:date" value="${e(v.date)}"></div><div class="field"><label for="planPlace">Location</label><input id="planPlace" name="place" data-draft="modal:place" placeholder="Where?" value="${e(v.place)}"></div></div>
+<div class="form-row"><div class="field"><label for="planDate">Date</label><input id="planDate" name="date" type="date" ${DATE_BOUNDS} data-draft="modal:date" value="${e(v.date)}"></div><div class="field"><label for="planPlace">Location</label><input id="planPlace" name="place" data-draft="modal:place" placeholder="Where?" value="${e(v.place)}"></div></div>
 <div class="field"><label for="planDesc">Notes</label><textarea id="planDesc" name="desc" data-draft="modal:desc" placeholder="Ideas, details, who is coming...">${e(v.desc)}</textarea></div>
 <div class="field" role="group" aria-labelledby="emojiLabel"><span class="label" id="emojiLabel">Emoji</span><input type="hidden" name="emoji" value="${e(v.emoji)}"><div class="emoji-row">${emojis.map((em) => `<button type="button" class="emoji-btn" data-action="pick-emoji" data-emoji="${e(em)}" aria-pressed="${em === v.emoji}" aria-label="Emoji ${e(em)}">${e(em)}</button>`).join("")}</div></div>
 <p class="form-error" id="formError" role="alert"></p>
