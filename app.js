@@ -281,7 +281,6 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       const general = L.tasksFor(state, null);
       const planCards = state.plans
         .map((p) => ({ p, tasks: L.tasksFor(state, p.id) }))
-        .filter(({ tasks }) => tasks.length)
         .map(({ p, tasks }) => `<section class="widget"><h3><button class="link-title" data-action="open-plan" data-id="${e(p.id)}">${e(p.emoji)} ${e(p.title)}</button><span class="progress">${progressText(tasks)}</span></h3>${taskBlock(p.id)}</section>`)
         .join("");
       return `<div class="cards-2"><section class="widget"><h3>General ☑<span class="progress">${progressText(general)}</span></h3>${taskBlock(null)}</section>${planCards}</div>`;
