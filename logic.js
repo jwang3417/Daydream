@@ -147,6 +147,42 @@
     return { version: 1, plans, tasks, memories };
   }
 
+  const PHOTO_DATA_URL = /^data:image\/[\w.+-]+;base64,/;
+
+  function parseArray(raw) {
+    try {
+      const v = JSON.parse(raw);
+      return Array.isArray(v) ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Converts the starter template's keys. Ids come from list positions so a rerun yields the same ids and photo keys.
+  function fromLegacy({ plans, tasks, memories }, today) {
+    const seed = seedState(today);
+    const oldPlans = parseArray(plans);
+    const oldTasks = parseArray(tasks);
+    const photos = [];
+    const state = {
+      version: 1,
+      plans: oldPlans ? oldPlans.flatMap((p, i) => (p && str(p.title).trim() !== "" ? [{ id: `legacy-plan-${i}`, ...cleanPlan(p) }] : [])) : seed.plans,
+      tasks: oldTasks
+        ? oldTasks.flatMap((t, i) => (t && str(t.t).trim() !== "" ? [{ id: `legacy-task-${i}`, text: t.t.trim(), done: t.done === true, planId: null }] : []))
+        : seed.tasks,
+      memories: (parseArray(memories) || []).flatMap((m, i) => {
+        if (!m) return [];
+        const id = `legacy-memory-${i}`;
+        const photo = PHOTO_DATA_URL.test(str(m.photo)) ? m.photo : "";
+        const fields = { ...m, hasPhoto: photo !== "" };
+        if (!canSaveMemory(fields)) return [];
+        if (photo) photos.push({ id, dataUrl: photo });
+        return [{ id, ...cleanMemory(fields) }];
+      }),
+    };
+    return { state, photos };
+  }
+
   function addPlan(state, fields, id) {
     return { ...state, plans: [{ id, ...cleanPlan(fields) }, ...state.plans] };
   }
@@ -234,7 +270,7 @@
   const api = {
     PLAN_TYPES, EMOJI_CHOICES, escapeHtml,
     dateKey, parseKey, isDateKey, dateKeyFromDate, addDays, daysBetween, countdownLabel, shiftMonth, monthGrid,
-    seedState, parseState,
+    seedState, parseState, fromLegacy,
     addPlan, updatePlan, deletePlan, addTask, toggleTask, deleteTask, parseTags, canSaveMemory, addMemory, deleteMemory,
     upcomingPlans, filterPlans, plansByDate, plansInMonth, tasksFor, progress, stats,
   };

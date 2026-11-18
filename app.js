@@ -60,6 +60,30 @@
     return saved;
   }
 
+  const LEGACY_KEYS = { plans: "daydreamPlans", tasks: "daydreamTasks", memories: "daydreamMemories" };
+
+  // Photos are stored before daydream.v1 is written, so a run that died partway repeats on the next load and converges.
+  async function migrateLegacy() {
+    let raw;
+    try {
+      if (localStorage.getItem(STORAGE_KEY) !== null) return null;
+      raw = Object.fromEntries(Object.entries(LEGACY_KEYS).map(([k, key]) => [k, localStorage.getItem(key)]));
+    } catch (err) {
+      return null;
+    }
+    if (Object.values(raw).every((v) => v === null)) return null;
+    const { state: migrated, photos } = L.fromLegacy(raw, todayKey());
+    const lost = new Set();
+    await Promise.all(photos.map((p) => fetch(p.dataUrl).then((r) => r.blob()).then((b) => putPhoto(p.id, b)).catch(() => lost.add(p.id))));
+    const next = { ...migrated, memories: migrated.memories.map((m) => (lost.has(m.id) ? { ...m, hasPhoto: false } : m)) };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch (err) {
+      toast("Couldn't save to this browser. Storage may be full or blocked.");
+    }
+    return next;
+  }
+
   let toastTimer;
   function toast(msg) {
     const t = $("toast");
@@ -572,6 +596,9 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     render();
   });
 
-  syncRoute();
-  render();
+  migrateLegacy().then((migrated) => {
+    if (migrated) state = migrated;
+    syncRoute();
+    render();
+  });
 })();
