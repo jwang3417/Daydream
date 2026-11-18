@@ -576,7 +576,19 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
   document.addEventListener("change", (ev) => dispatch("change", ev));
   document.addEventListener("submit", (ev) => dispatch("submit", ev));
   document.addEventListener("input", (ev) => { const k = ev.target.dataset.draft; if (k) ui.drafts[k] = ev.target.value; });
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && ui.modal) closeModal(); });
+  document.addEventListener("keydown", (ev) => {
+    if (!ui.modal) return;
+    if (ev.key === "Escape") closeModal();
+    if (ev.key !== "Tab") return;
+    const items = [...$("modalRoot").querySelectorAll("button, input:not([type=hidden]), select, textarea")];
+    const at = document.activeElement;
+    const inside = $("modalRoot").contains(at);
+    const target = ev.shiftKey ? (at === items[0] || !inside) && items.at(-1) : (at === items.at(-1) || !inside) && items[0];
+    if (target) {
+      ev.preventDefault();
+      target.focus();
+    }
+  });
 
   $("search").addEventListener("input", (ev) => {
     ui.query = ev.target.value;
