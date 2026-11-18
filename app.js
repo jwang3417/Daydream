@@ -28,7 +28,11 @@
 
   let state = loadState();
   const now = new Date();
-  const ui = { route: "home", filter: "all", query: "", calendarCursor: { year: now.getFullYear(), month: now.getMonth() }, modal: null };
+  const ui = { route: "home", filter: "all", query: "", calendarCursor: { year: now.getFullYear(), month: now.getMonth() }, modal: null, drafts: {} };
+  const draft = (k, fallback = "") => (Object.hasOwn(ui.drafts, k) ? ui.drafts[k] : fallback);
+  function dropDrafts(prefix) {
+    for (const k of Object.keys(ui.drafts)) if (k.startsWith(prefix)) delete ui.drafts[k];
+  }
 
   function loadState() {
     let raw = null;
@@ -124,12 +128,6 @@
     });
   }
 
-  let draftPhoto = null;
-  function clearDraftPhoto() {
-    if (draftPhoto) URL.revokeObjectURL(draftPhoto.url);
-    draftPhoto = null;
-  }
-
   function downscale(file) {
     return new Promise((resolve, reject) => {
       const src = URL.createObjectURL(file);
@@ -178,7 +176,7 @@
 
   function taskBlock(planId) {
     const tasks = L.tasksFor(state, planId);
-    return `<div class="checklist">${tasks.length ? tasks.map(taskLine).join("") : `<p class="muted">Nothing here yet.</p>`}</div><form class="add-task" data-action="add-task" data-plan-id="${e(planId ?? "")}"><input name="text" data-field="new-task" aria-label="Add a checklist item" placeholder="Add a reminder..." autocomplete="off"><button class="button" type="submit">Add</button></form>`;
+    return `<div class="checklist">${tasks.length ? tasks.map(taskLine).join("") : `<p class="muted">Nothing here yet.</p>`}</div><form class="add-task" data-action="add-task" data-plan-id="${e(planId ?? "")}"><input name="text" data-draft="task:${e(planId ?? "")}" value="${e(draft(`task:${planId ?? ""}`))}" aria-label="Add a checklist item" placeholder="Add a reminder..." autocomplete="off"><button class="button" type="submit">Add</button></form>`;
   }
 
   const progressText = (tasks) => {
@@ -205,15 +203,19 @@
     return `<div class="filters" role="group" aria-label="Filter plans">${chip("all", "All plans")}${Object.entries(PLAN_TYPES).map(([k, t]) => chip(k, t.filter)).join("")}</div>`;
   }
 
+  const MOODS = ["Happy ☀️", "Excited ✨", "Peaceful 🌿", "Grateful ♡", "Silly 😄", "Adventurous 🗺️", "Cozy ☁️"];
+
   function journalForm(today) {
+    const mood = draft("journal:mood");
+    const photo = draft("journal:photo", null);
     return `<div class="journal-form-panel"><h3>Save a memory ♡</h3><p>Photos, little moments, thoughts, and stories.</p><form data-action="save-memory"><div class="journal-fields">
-<label class="sr-only" for="memoryTitle">Memory title</label><input id="memoryTitle" name="title" placeholder="Memory title (optional)">
-<label class="sr-only" for="memoryDate">Date</label><input id="memoryDate" name="date" type="date" value="${today}">
-<label class="sr-only" for="memoryMood">Mood</label><select id="memoryMood" name="mood"><option value="">Choose a mood (optional)</option><option>Happy ☀️</option><option>Excited ✨</option><option>Peaceful 🌿</option><option>Grateful ♡</option><option>Silly 😄</option><option>Adventurous 🗺️</option><option>Cozy ☁️</option></select>
-<label class="sr-only" for="memoryText">What happened</label><textarea id="memoryText" name="text" placeholder="Write about your day, what happened, what you loved, or anything you want to remember..."></textarea>
-<label class="sr-only" for="memoryTags">Tags</label><input id="memoryTags" name="tags" placeholder="Tags (separate with commas)">
+<label class="sr-only" for="memoryTitle">Memory title</label><input id="memoryTitle" name="title" data-draft="journal:title" value="${e(draft("journal:title"))}" placeholder="Memory title (optional)">
+<label class="sr-only" for="memoryDate">Date</label><input id="memoryDate" name="date" type="date" data-draft="journal:date" value="${e(draft("journal:date", today))}">
+<label class="sr-only" for="memoryMood">Mood</label><select id="memoryMood" name="mood" data-draft="journal:mood"><option value="">Choose a mood (optional)</option>${MOODS.map((o) => `<option ${o === mood ? "selected" : ""}>${e(o)}</option>`).join("")}</select>
+<label class="sr-only" for="memoryText">What happened</label><textarea id="memoryText" name="text" data-draft="journal:text" placeholder="Write about your day, what happened, what you loved, or anything you want to remember...">${e(draft("journal:text"))}</textarea>
+<label class="sr-only" for="memoryTags">Tags</label><input id="memoryTags" name="tags" data-draft="journal:tags" value="${e(draft("journal:tags"))}" placeholder="Tags (separate with commas)">
 <label class="photo-pick">📷 Add a photo <input type="file" id="memoryPhoto" accept="image/*" data-action="pick-photo"></label>
-<img class="photo-preview" id="memoryPreview" alt="Selected memory photo preview">
+<img class="photo-preview" id="memoryPreview" alt="Selected memory photo preview"${photo ? ` src="${photo.url}" style="display:block"` : ""}>
 </div><p class="form-note" id="journalMsg" role="status"></p><button class="button" type="submit">Save Memory ♡</button></form></div>`;
   }
 
@@ -294,14 +296,14 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
 
     "plan-form"(m) {
       const p = m.id ? planById(m.id) : null;
-      const type = p ? p.type : "trip";
-      const v = { title: p ? p.title : "", date: p ? p.date : m.presetDate || "", place: p ? p.place : "", desc: p ? p.desc : "", emoji: p ? p.emoji : PLAN_TYPES[type].emoji };
+      const base = p || { title: "", type: "trip", date: m.presetDate || "", place: "", desc: "", emoji: PLAN_TYPES.trip.emoji };
+      const v = Object.fromEntries(["title", "type", "date", "place", "desc", "emoji"].map((k) => [k, draft(`modal:${k}`, base[k])]));
       const emojis = [...new Set([...L.EMOJI_CHOICES, v.emoji])];
       return modalShell(p ? "Edit plan" : "Create a new plan", `<form data-action="save-plan" data-id="${e(m.id || "")}">
-<div class="field"><label for="planName">What are you planning?</label><input id="planName" name="title" autofocus required placeholder="e.g. Beach weekend, Birthday dinner" value="${e(v.title)}"></div>
-<div class="field"><label for="planType">Type</label><select id="planType" name="type" data-action="plan-type" data-prev="${type}">${Object.entries(PLAN_TYPES).map(([k, t]) => `<option value="${k}" ${k === type ? "selected" : ""}>${e(t.formLabel)}</option>`).join("")}</select></div>
-<div class="form-row"><div class="field"><label for="planDate">Date</label><input id="planDate" name="date" type="date" value="${e(v.date)}"></div><div class="field"><label for="planPlace">Location</label><input id="planPlace" name="place" placeholder="Where?" value="${e(v.place)}"></div></div>
-<div class="field"><label for="planDesc">Notes</label><textarea id="planDesc" name="desc" placeholder="Ideas, details, who is coming...">${e(v.desc)}</textarea></div>
+<div class="field"><label for="planName">What are you planning?</label><input id="planName" name="title" data-draft="modal:title" autofocus required placeholder="e.g. Beach weekend, Birthday dinner" value="${e(v.title)}"></div>
+<div class="field"><label for="planType">Type</label><select id="planType" name="type" data-draft="modal:type" data-action="plan-type" data-prev="${v.type}">${Object.entries(PLAN_TYPES).map(([k, t]) => `<option value="${k}" ${k === v.type ? "selected" : ""}>${e(t.formLabel)}</option>`).join("")}</select></div>
+<div class="form-row"><div class="field"><label for="planDate">Date</label><input id="planDate" name="date" type="date" data-draft="modal:date" value="${e(v.date)}"></div><div class="field"><label for="planPlace">Location</label><input id="planPlace" name="place" data-draft="modal:place" placeholder="Where?" value="${e(v.place)}"></div></div>
+<div class="field"><label for="planDesc">Notes</label><textarea id="planDesc" name="desc" data-draft="modal:desc" placeholder="Ideas, details, who is coming...">${e(v.desc)}</textarea></div>
 <div class="field" role="group" aria-labelledby="emojiLabel"><span class="label" id="emojiLabel">Emoji</span><input type="hidden" name="emoji" value="${e(v.emoji)}"><div class="emoji-row">${emojis.map((em) => `<button type="button" class="emoji-btn" data-action="pick-emoji" data-emoji="${e(em)}" aria-pressed="${em === v.emoji}" aria-label="Emoji ${e(em)}">${e(em)}</button>`).join("")}</div></div>
 <p class="form-error" id="formError" role="alert"></p>
 <div class="modal-actions"><button type="button" class="button secondary" data-action="close-modal">Cancel</button><button class="button" type="submit">Save plan</button></div></form>`);
@@ -324,9 +326,10 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
 
   function render() {
     const before = describe(document.activeElement);
-    clearDraftPhoto();
     const m = ui.modal;
     if (m && (m.kind === "plan-detail" || m.id) && !planById(m.id)) ui.modal = null;
+    const key = ui.modal ? ui.modal.kind + (ui.modal.id || "") : "";
+    if (key !== shownModalKey) dropDrafts("modal:");
     const today = todayKey();
     const route = ROUTES[ui.route];
 
@@ -338,7 +341,6 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     $("modalRoot").innerHTML = ui.modal ? MODALS[ui.modal.kind](ui.modal, today) : "";
     hydratePhotos();
 
-    const key = ui.modal ? ui.modal.kind + (ui.modal.id || "") : "";
     if (key !== shownModalKey) {
       if (ui.modal) {
         if (!shownModalKey) triggerDesc = describe(lastActionEl);
@@ -380,6 +382,7 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
 
   function setEmoji(form, emoji) {
     form.elements.emoji.value = emoji;
+    ui.drafts["modal:emoji"] = emoji;
     form.querySelectorAll(".emoji-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.emoji === emoji)));
   }
 
@@ -395,11 +398,10 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     }
     try {
       const blob = await downscale(file);
-      clearDraftPhoto();
-      draftPhoto = { blob, url: URL.createObjectURL(blob) };
-      const preview = $("memoryPreview");
-      preview.src = draftPhoto.url;
-      preview.style.display = "block";
+      const old = draft("journal:photo", null);
+      if (old) URL.revokeObjectURL(old.url);
+      ui.drafts["journal:photo"] = { blob, url: URL.createObjectURL(blob) };
+      render();
     } catch (err) {
       msg.textContent = "That image couldn't be read. Try a different one.";
     }
@@ -409,7 +411,8 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     const msg = $("journalMsg");
     const submit = form.querySelector('button[type="submit"]');
     const f = new FormData(form);
-    const fields = { title: f.get("title"), date: f.get("date"), mood: f.get("mood"), text: f.get("text"), tags: L.parseTags(f.get("tags")), hasPhoto: draftPhoto !== null };
+    const photo = draft("journal:photo", null);
+    const fields = { title: f.get("title"), date: f.get("date"), mood: f.get("mood"), text: f.get("text"), tags: L.parseTags(f.get("tags")), hasPhoto: photo !== null };
     if (!L.canSaveMemory(fields)) {
       msg.textContent = "Add a title, some writing, or a photo to save a memory.";
       return;
@@ -417,9 +420,9 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     const id = uid();
     let note = "";
     submit.disabled = true;
-    if (draftPhoto) {
+    if (photo) {
       try {
-        await putPhoto(id, draftPhoto.blob);
+        await putPhoto(id, photo.blob);
       } catch (err) {
         fields.hasPhoto = false;
         note = " The photo couldn't be stored in this browser, so it was left out.";
@@ -430,6 +433,8 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       msg.textContent = "This browser can't store photos right now. Add a title or some writing to save the memory without it.";
       return;
     }
+    if (photo) URL.revokeObjectURL(photo.url);
+    dropDrafts("journal:");
     commit(L.addMemory(state, fields, id));
     toast(`Memory saved ♡${note}`);
   }
@@ -498,7 +503,9 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       "add-task": (form) => {
         const text = new FormData(form).get("text");
         const next = L.addTask(state, { text, planId: form.dataset.planId || null }, uid());
-        if (next !== state) commit(next);
+        if (next === state) return;
+        delete ui.drafts[form.elements.text.dataset.draft];
+        commit(next);
       },
     },
   };
@@ -515,6 +522,7 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
   document.addEventListener("click", (ev) => dispatch("click", ev));
   document.addEventListener("change", (ev) => dispatch("change", ev));
   document.addEventListener("submit", (ev) => dispatch("submit", ev));
+  document.addEventListener("input", (ev) => { const k = ev.target.dataset.draft; if (k) ui.drafts[k] = ev.target.value; });
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && ui.modal) closeModal(); });
 
   $("search").addEventListener("input", (ev) => {
