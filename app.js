@@ -28,7 +28,7 @@
 
   let state = loadState();
   const now = new Date();
-  const ui = { route: "home", filter: "all", query: "", calendarCursor: { year: now.getFullYear(), month: now.getMonth() }, modal: null, drafts: {} };
+  const ui = { route: "home", filter: "all", query: "", calendarCursor: { year: now.getFullYear(), month: now.getMonth() }, modal: null, confirmMemory: null, drafts: {} };
   const draft = (k, fallback = "") => (Object.hasOwn(ui.drafts, k) ? ui.drafts[k] : fallback);
   function dropDrafts(prefix) {
     for (const k of Object.keys(ui.drafts)) if (k.startsWith(prefix)) delete ui.drafts[k];
@@ -190,12 +190,17 @@
     return `${done} of ${total} done`;
   };
 
+  const memoryDelete = (id) =>
+    ui.confirmMemory === id
+      ? `<button class="memory-delete" data-action="delete-memory" data-id="${e(id)}">Yes, delete</button><button class="memory-delete" data-action="cancel-delete-memory" data-id="${e(id)}">Cancel</button>`
+      : `<button class="memory-delete" data-action="ask-delete-memory" data-id="${e(id)}">Delete entry</button>`;
+
   function memoryCard(m, deletable) {
     const media = m.hasPhoto
       ? `<div class="memory-media" data-photo="${e(m.id)}" data-alt="${e(`Photo for ${m.title || "a little memory"}`)}"><div class="memory-image placeholder">♡</div></div>`
       : `<div class="memory-image placeholder">♡</div>`;
     const tags = m.tags.length ? `<div class="memory-tags">${m.tags.map((t) => `<span class="memory-tag">#${e(t)}</span>`).join("")}</div>` : "";
-    return `<article class="memory-card">${media}<div class="memory-body"><h3 class="memory-title">${e(m.title || "A little memory")}</h3><div class="memory-date">${e(fmtDate(m.date))}${m.mood ? ` · ${e(m.mood)}` : ""}</div><p class="memory-text">${e(m.text)}</p>${tags}${deletable ? `<button class="memory-delete" data-action="delete-memory" data-id="${e(m.id)}">Delete entry</button>` : ""}</div></article>`;
+    return `<article class="memory-card">${media}<div class="memory-body"><h3 class="memory-title">${e(m.title || "A little memory")}</h3><div class="memory-date">${e(fmtDate(m.date))}${m.mood ? ` · ${e(m.mood)}` : ""}</div><p class="memory-text">${e(m.text)}</p>${tags}${deletable ? memoryDelete(m.id) : ""}</div></article>`;
   }
 
   const memoryGrid = (memories, deletable) =>
@@ -379,6 +384,7 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     }
     ui.route = name;
     ui.modal = null;
+    ui.confirmMemory = null;
   }
 
   const openModal = (modal) => { ui.modal = modal; render(); };
@@ -486,9 +492,20 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       "cal-next": () => { ui.calendarCursor = L.shiftMonth(ui.calendarCursor, 1); render(); },
       "cal-today": () => { const d = new Date(); ui.calendarCursor = { year: d.getFullYear(), month: d.getMonth() }; render(); },
       "delete-task": (el) => commit(L.deleteTask(state, el.dataset.id)),
+      "ask-delete-memory": (el) => {
+        ui.confirmMemory = el.dataset.id;
+        render();
+        $("view").querySelector('[data-action="delete-memory"]').focus();
+      },
+      "cancel-delete-memory": (el) => {
+        ui.confirmMemory = null;
+        render();
+        $("view").querySelector(`[data-action="ask-delete-memory"][data-id="${CSS.escape(el.dataset.id)}"]`).focus();
+      },
       "delete-memory": (el) => {
         const id = el.dataset.id;
         commit(L.deleteMemory(state, id), () => {
+          ui.confirmMemory = null;
           forgetPhoto(id);
           toast("Memory deleted");
         });
