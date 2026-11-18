@@ -357,8 +357,6 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
         if (back) back.focus();
       }
       shownModalKey = key;
-    } else if (ui.modal && ui.modal.confirming) {
-      $("modalRoot").querySelector('[data-action="delete-plan"]').focus();
     } else if (document.activeElement === document.body) {
       const again = resolve(before);
       if (again) again.focus();
@@ -468,8 +466,14 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       "new-plan-on": (el) => openModal({ kind: "plan-form", id: null, presetDate: el.dataset.date }),
       "open-plan": (el) => openModal({ kind: "plan-detail", id: el.dataset.id }),
       "edit-plan": (el) => openModal({ kind: "plan-form", id: el.dataset.id }),
-      "ask-delete": () => openModal({ ...ui.modal, confirming: true }),
-      "cancel-delete": () => openModal({ kind: "plan-detail", id: ui.modal.id }),
+      "ask-delete": () => {
+        openModal({ ...ui.modal, confirming: true });
+        $("modalRoot").querySelector('[data-action="delete-plan"]').focus();
+      },
+      "cancel-delete": () => {
+        openModal({ kind: "plan-detail", id: ui.modal.id });
+        $("modalRoot").querySelector('[data-action="ask-delete"]').focus();
+      },
       "delete-plan": (el) => commit(L.deletePlan(state, el.dataset.id), () => {
         ui.modal = null;
         toast("Plan deleted");
@@ -510,12 +514,18 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     },
   };
 
+  const CONFIRM_ACTIONS = new Set(["delete-plan", "cancel-delete"]);
+
   function dispatch(type, ev) {
     const el = ev.target.closest("[data-action]");
     const handler = el && HANDLERS[type][el.dataset.action];
     if (!handler) return;
     if (type === "click") lastActionEl = el;
     if (type === "submit") ev.preventDefault();
+    if (ui.modal?.confirming && el.closest(".modal") && !CONFIRM_ACTIONS.has(el.dataset.action)) {
+      ui.modal = { ...ui.modal, confirming: false };
+      render();
+    }
     handler(el, ev);
   }
 
