@@ -44,14 +44,20 @@
     return L.parseState(raw, todayKey());
   }
 
-  function commit(next) {
-    state = next;
+  function commit(next, onSaved) {
+    let saved = true;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch (err) {
+      saved = false;
       toast("Couldn't save to this browser. Storage may be full or blocked.");
     }
+    if (saved) {
+      state = next;
+      if (onSaved) onSaved();
+    }
     render();
+    return saved;
   }
 
   let toastTimer;
@@ -263,7 +269,7 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     },
 
     journal(today) {
-      return `<div class="section-head"><h2>My Journal ✧</h2></div><div class="journal-layout"><div class="journal-board"><div class="journal-grid" id="journalEntries">${memoryGrid(state.memories, true)}</div></div>${journalForm(today)}</div>`;
+      return `<div class="section-head"><h2>My Journal ✧</h2></div><div class="journal-layout"><div class="journal-board"><div class="journal-grid">${memoryGrid(state.memories, true)}</div></div>${journalForm(today)}</div>`;
     },
 
     checklists() {
@@ -433,10 +439,12 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       msg.textContent = "This browser can't store photos right now. Add a title or some writing to save the memory without it.";
       return;
     }
-    if (photo) URL.revokeObjectURL(photo.url);
-    dropDrafts("journal:");
-    commit(L.addMemory(state, fields, id));
-    toast(`Memory saved ♡${note}`);
+    const saved = commit(L.addMemory(state, fields, id), () => {
+      if (photo) URL.revokeObjectURL(photo.url);
+      dropDrafts("journal:");
+      toast(`Memory saved ♡${note}`);
+    });
+    if (!saved && fields.hasPhoto) removePhoto(id).catch(() => {});
   }
 
   function savePlan(form) {
@@ -447,9 +455,10 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       return;
     }
     const id = form.dataset.id;
-    ui.modal = null;
-    commit(id ? L.updatePlan(state, id, fields) : L.addPlan(state, fields, uid()));
-    toast("Plan saved ✨");
+    commit(id ? L.updatePlan(state, id, fields) : L.addPlan(state, fields, uid()), () => {
+      ui.modal = null;
+      toast("Plan saved ✨");
+    });
   }
 
   const HANDLERS = {
@@ -461,11 +470,10 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       "edit-plan": (el) => openModal({ kind: "plan-form", id: el.dataset.id }),
       "ask-delete": () => openModal({ ...ui.modal, confirming: true }),
       "cancel-delete": () => openModal({ kind: "plan-detail", id: ui.modal.id }),
-      "delete-plan": (el) => {
+      "delete-plan": (el) => commit(L.deletePlan(state, el.dataset.id), () => {
         ui.modal = null;
-        commit(L.deletePlan(state, el.dataset.id));
         toast("Plan deleted");
-      },
+      }),
       "close-modal": closeModal,
       backdrop: (el, ev) => { if (ev.target === el) closeModal(); },
       "set-filter": (el) => { ui.filter = el.dataset.filter; render(); },
@@ -476,16 +484,10 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       "delete-task": (el) => commit(L.deleteTask(state, el.dataset.id)),
       "delete-memory": (el) => {
         const id = el.dataset.id;
-        state = L.deleteMemory(state, id);
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        } catch (err) {
-          toast("Couldn't save to this browser. Storage may be full or blocked.");
-        }
-        forgetPhoto(id);
-        $("journalEntries").innerHTML = memoryGrid(state.memories, true);
-        hydratePhotos();
-        toast("Memory deleted");
+        commit(L.deleteMemory(state, id), () => {
+          forgetPhoto(id);
+          toast("Memory deleted");
+        });
       },
     },
     change: {
@@ -503,9 +505,7 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
       "add-task": (form) => {
         const text = new FormData(form).get("text");
         const next = L.addTask(state, { text, planId: form.dataset.planId || null }, uid());
-        if (next === state) return;
-        delete ui.drafts[form.elements.text.dataset.draft];
-        commit(next);
+        if (next !== state) commit(next, () => delete ui.drafts[form.elements.text.dataset.draft]);
       },
     },
   };
