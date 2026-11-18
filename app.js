@@ -544,6 +544,12 @@ ${planGrid(shown, ui.query ? "No plans match your search." : "No plans here yet.
     else location.hash = "#/plans";
   });
 
+  window.addEventListener("storage", (ev) => {
+    if (ev.key !== STORAGE_KEY && ev.key !== null) return;
+    state = loadState();
+    render();
+  });
+
   window.addEventListener("hashchange", () => {
     syncRoute();
     window.scrollTo(0, 0);
